@@ -77,6 +77,7 @@ class CashlogyDriver(ThreadDriver):
                     continue
                 self.process_task(task, timestamp, data)
             except Exception as e:
+                traceback.print_exc()
                 self.set_status("error", str(e))
                 errmsg = (
                     str(e)
@@ -116,6 +117,7 @@ class CashlogyDriver(ThreadDriver):
             return True
         except Exception as e:
             self.set_status("error", repr(e))
+            traceback.print_exc()
             return False
 
     def initialize(self):
@@ -128,7 +130,7 @@ class CashlogyDriver(ThreadDriver):
             res = self.send(["I"])
         finally:
             self.socket.settimeout(SOCKET_TIMEOUT)
-        return res[1]
+        return res and res[1]
 
     def disconnect(self):
         """Send disconnect command and close the connection."""
@@ -333,7 +335,8 @@ drivers["cashlogy_cashdrawer_driver"] = cashlogy_cashdrawer_driver
 @app.route("/hw_proxy/cashlogy/connect", methods=["POST"])
 def cashlogy_connect():
     """Receive connection config and connect/reconnect if needed."""
-    params = request.json or {}
+    json_data = request.json or {}
+    params = json_data.get("params", {})
     device_config = params.get("config", {})
     result = cashlogy_cashdrawer_driver.keepalive(device_config, force=True)
     return jsonify(jsonrpc="2.0", result=result)
@@ -347,6 +350,7 @@ def cashlogy_command(cmd):
             jsonify(jsonrpc="2.0", result={"error": "Invalid command: %s" % cmd}),
             400,
         )
-    params = request.json or {}
+    json_data = request.json or {}
+    params = json_data.get("params", {})
     result = getattr(cashlogy_cashdrawer_driver, cmd)(**params)
     return jsonify(jsonrpc="2.0", result=result)
