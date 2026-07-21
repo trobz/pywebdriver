@@ -81,6 +81,16 @@ api_key=api_key_from_adyen
 ;host=127.0.0.1
 ;port=8080
 
+[pax_driver]
+; IP address of the PAX terminal (no scheme, e.g. 192.168.1.100)
+terminal_ip=192.168.1.100
+; TCP port exposed by the PAX terminal HTTP server (default: 10009)
+terminal_port=10009
+; Set to true if the terminal is configured for TLS
+use_https=false
+; Request timeout in seconds (default: 120)
+timeout=120
+
 [scale_driver]
 ; Customise this
 protocol_name=toledo
