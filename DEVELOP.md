@@ -44,3 +44,15 @@ if you want to install the generated package, run:
 ```
 sudo apt-get  install ./build/pywebdriver_20230809_amd64.deb
 ```
+
+On weak CPUs without AVX support (e.g. Intel Celeron J4125), the prebuilt
+`pycups` wheel may fail at runtime. Fix it by rebuilding `pycups` from source
+in the venv:
+
+```bash
+pip install --no-binary :all: --force-reinstall pycups
+```
+
+Generated `.deb` packages already do this automatically (see
+`override_dh_virtualenv` in `debian/rules`), so a build produced by CI or
+`build_ubuntu_2604.sh` works on these CPUs out of the box.

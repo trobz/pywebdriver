@@ -8,6 +8,9 @@ SNAKE=/usr/bin/python3
 
 override_dh_virtualenv:
 	dh_virtualenv --python=$(SNAKE) --builtin-venv
+	# the prebuilt pycups wheel needs AVX; rebuild it from source so the
+	# packaged venv also works on weak/old CPUs (e.g. Celeron J4125)
+	debian/pywebdriver/opt/venvs/pywebdriver/bin/pip install --no-binary :all: --force-reinstall pycups
 
 # https://dh-virtualenv.readthedocs.io/en/latest/howtos.html#handling-binary-wheels
 override_dh_strip:
