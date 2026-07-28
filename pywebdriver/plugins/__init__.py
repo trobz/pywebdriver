@@ -14,6 +14,7 @@ DEFAULT_DRIVERS = [
     "telium_driver",
     "opcua_driver",
     "cashlogy_cashdrawer_driver",
+    "pax_driver",
     "odoo8",
 ]
 
