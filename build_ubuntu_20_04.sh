@@ -14,6 +14,13 @@ mkdir -p $BUILD_DIR
 cat <<DEBUILD > debuild.sh
 mkdir -p build
 rm -f debian/changelog
+
+# For weak/old CPUs which don't support AVX (e.g. Celeron J4125)
+export DEB_CFLAGS_SET="-march=x86-64 -mtune=generic"
+export DEB_CXXFLAGS_SET="-march=x86-64 -mtune=generic"
+export CFLAGS="-march=x86-64 -mtune=generic"
+export CXXFLAGS="-march=x86-64 -mtune=generic"
+
 dch --package $PACKAGE --newversion $(date +%Y%m%d) --create -m "$MESSAGE"
 debuild
 cp ../${PACKAGE}_* /build

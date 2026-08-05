@@ -1,4 +1,5 @@
-setuptools>=34
+# for ecpos package which is still using pkg_resources (setuptools v82.0.0 removed pkg_resources)
+setuptools>34,<82
 wheel
 #jcconv
 simplejson
