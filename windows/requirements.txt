@@ -3,6 +3,7 @@ simplejson
 Flask<2.3
 Flask-Babel
 Flask-cors
+requests
 #pyusb # Only useful to make escpos work via usb (easier via win32raw)
 pyserial
 Pillow
