@@ -5,6 +5,7 @@
 import pypostelium
 import simplejson as json
 from flask import jsonify, render_template, request
+from serial import Serial
 
 from pywebdriver import app, config, drivers
 
@@ -26,6 +27,56 @@ class TeliumDriver(ThreadDriver, pypostelium.Driver):
             "payment_mode": payment_mode,
             "currency_iso": "EUR",
         }
+
+    def transaction_start_with_return(self, payment_info):
+        """Same as pypostelium.Driver.transaction_start(), but returns the
+        full answer from the terminal instead of a plain True/False, for
+        callers that need to wait for and read the payment result
+        synchronously.
+        """
+        payment_info_dict = json.loads(payment_info)
+        assert isinstance(payment_info_dict, dict), "payment_info_dict should be a dict"
+        answer = {}
+        try:
+            app.logger.debug(
+                "Telium: opening serial port %s for payment terminal "
+                "with baudrate %d",
+                self.device_name,
+                self.device_rate,
+            )
+            # IMPORTANT: don't modify timeout=3 seconds. The Telium spec
+            # says we have to wait up to 3 seconds to get the LRC.
+            self.serial = Serial(self.device_name, self.device_rate, timeout=3)
+            if self.initialize_msg():
+                data = self.prepare_data_to_send(payment_info_dict)
+                if not data:
+                    return answer
+                self.send_message(data)
+                if self.get_one_byte_answer("ACK"):
+                    self.send_one_byte_signal("EOT")
+                    app.logger.info("Telium: now expecting answer from Terminal")
+                    if self.get_one_byte_answer("ENQ"):
+                        self.send_one_byte_signal("ACK")
+                        answer_data = self.get_answer_from_terminal(data)
+                        self.send_one_byte_signal("ACK")
+                        if self.get_one_byte_answer("EOT"):
+                            app.logger.info("Telium: answer received from Terminal")
+                            answer = {
+                                "pos_number": answer_data["pos_number"],
+                                "transaction_result": int(
+                                    answer_data["transaction_result"]
+                                ),
+                                "amount_msg": float(answer_data["amount_msg"]),
+                                "payment_mode": answer_data["payment_mode"],
+                                "payment_terminal_return_message": answer_data,
+                            }
+        except Exception as e:
+            app.logger.error("Telium: exception in serial connection: %s", e)
+        finally:
+            if self.serial:
+                app.logger.debug("Telium: closing serial port for payment terminal")
+                self.serial.close()
+        return answer
 
 
 driver_config = {}
@@ -51,6 +102,19 @@ def payment_terminal_transaction_start():
     app.logger.debug("Telium: payment_info=%s", payment_info)
     result = telium_driver.transaction_start(payment_info)
     app.logger.debug("Telium: result of transation_start=%s", result)
+    return jsonify(jsonrpc="2.0", result=result)
+
+
+@app.route(
+    "/hw_proxy/payment_terminal_transaction_start_with_return",
+    methods=["POST", "GET", "PUT"],
+)
+def payment_terminal_transaction_start_with_return():
+    app.logger.debug("Telium: Call payment_terminal_transaction_start_with_return")
+    payment_info = request.json["params"]["payment_info"]
+    app.logger.debug("Telium: payment_info=%s", payment_info)
+    result = telium_driver.transaction_start_with_return(payment_info)
+    app.logger.debug("Telium: result of transaction_start_with_return=%s", result)
     return jsonify(jsonrpc="2.0", result=result)
 
 
