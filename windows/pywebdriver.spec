@@ -25,6 +25,8 @@ a = Analysis(
         "pywebdriver.plugins.signature_driver",
         "pywebdriver.plugins.telium_driver",
         "pywebdriver.plugins.opcua_driver",
+        "pywebdriver.plugins.cashlogy_cashdrawer_driver",
+        "pywebdriver.plugins.pax_driver",
         "pywebdriver.plugins.odoo8",
         "pywebdriver.plugins.win32print_driver",
         "pywebdriver.plugins.scale_driver",
