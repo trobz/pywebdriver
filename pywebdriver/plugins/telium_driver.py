@@ -86,9 +86,7 @@ class TeliumDriver(ThreadDriver, pypostelium.Driver):
         transaction_start() flow.
         """
         payment_info_dict = json.loads(payment_info)
-        assert isinstance(
-            payment_info_dict, dict
-        ), "payment_info_dict should be a dict"
+        assert isinstance(payment_info_dict, dict), "payment_info_dict should be a dict"
         answer = {}
         try:
             app.logger.debug(
