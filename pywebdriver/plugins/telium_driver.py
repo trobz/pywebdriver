@@ -22,6 +22,16 @@ class TeliumDriver(ThreadDriver, pypostelium.Driver):
         pypostelium.Driver.__init__(self, *args, **kwargs)
         # TODO : FIXME : Remove once 'status-posdisplay' branch is merged
         self.vendor_product = None
+        driver_config = args[0] if args else {}
+        # pyTeliumManager.Telium.verify() temporarily raises the serial
+        # read timeout to this value (its DELAY_TERMINAL_ANSWER_TRANSACTION
+        # constant, 120s) while waiting for the terminal's answer-ENQ: a
+        # real card transaction (insert card, PIN, network authorization)
+        # can take much longer than the fixed 3s timeout used for the rest
+        # of the protocol. pypostelium itself never raises it.
+        self.waiting_timeout = int(
+            driver_config.get("telium_terminal_waiting_timeout", 120)
+        )
 
     def get_payment_info_from_price(self, price, payment_mode):
         return {
@@ -108,7 +118,15 @@ class TeliumDriver(ThreadDriver, pypostelium.Driver):
                 if self.get_one_byte_answer("ACK"):
                     self.send_one_byte_signal("EOT")
                     app.logger.info("Telium: now expecting answer from Terminal")
-                    if self.get_one_byte_answer("ENQ"):
+                    # Raise the read timeout only for this wait: the
+                    # terminal can take much longer than 3s to actually
+                    # complete the transaction before it signals us.
+                    self.serial.timeout = self.waiting_timeout
+                    try:
+                        got_enq = self.get_one_byte_answer("ENQ")
+                    finally:
+                        self.serial.timeout = 3
+                    if got_enq:
                         self.send_one_byte_signal("ACK")
                         answer_data = self._get_fullsized_answer_from_terminal(data)
                         self.send_one_byte_signal("ACK")
@@ -140,6 +158,10 @@ if config.get("telium_driver", "device_name"):
 if config.getint("telium_driver", "device_rate"):
     driver_config["telium_terminal_device_rate"] = config.getint(
         "telium_driver", "device_rate"
+    )
+if config.getint("telium_driver", "waiting_timeout", fallback=0):
+    driver_config["telium_terminal_waiting_timeout"] = config.getint(
+        "telium_driver", "waiting_timeout", fallback=0
     )
 
 telium_driver = TeliumDriver(driver_config)

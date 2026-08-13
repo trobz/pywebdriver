@@ -87,6 +87,16 @@ print("WAIT_FOR_TRANSACTION = %s" % WAIT_FOR_TRANSACTION)
 ANSWER_SIZE = _env_choice("ANSWER_SIZE", ("fullsize", "smallsize"), "fullsize")
 print("ANSWER_SIZE = %s" % ANSWER_SIZE)
 
+# pyTeliumManager's Telium.verify() temporarily raises the serial read
+# timeout to this value (default 120s, its DELAY_TERMINAL_ANSWER_TRANSACTION
+# constant) while waiting for the terminal's answer-ENQ, since a real card
+# transaction (insert card, PIN, network authorization) can take much
+# longer than the few seconds used for the rest of the protocol.
+# pypostelium never does this -- it keeps the fixed 3s timeout throughout,
+# so without this the host gives up long before the terminal is done.
+WAITING_TIMEOUT = int(os.environ.get("WAITING_TIMEOUT", "120"))
+print("WAITING_TIMEOUT = %s" % WAITING_TIMEOUT)
+
 
 class TeliumTestDriver(pypostelium.Driver):
     """pypostelium.Driver, patched the same way as
@@ -152,7 +162,15 @@ class TeliumTestDriver(pypostelium.Driver):
                 if self.get_one_byte_answer("ACK"):
                     self.send_one_byte_signal("EOT")
                     print("Now expecting answer from Terminal")
-                    if self.get_one_byte_answer("ENQ"):
+                    # Raise the read timeout only for this wait: the
+                    # terminal can take much longer than 3s to actually
+                    # complete the transaction before it signals us.
+                    self.serial.timeout = WAITING_TIMEOUT
+                    try:
+                        got_enq = self.get_one_byte_answer("ENQ")
+                    finally:
+                        self.serial.timeout = 3
+                    if got_enq:
                         self.send_one_byte_signal("ACK")
                         if ANSWER_SIZE == "fullsize":
                             answer_data = self.get_fullsized_answer_from_terminal(data)
