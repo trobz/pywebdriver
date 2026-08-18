@@ -1,3 +1,5 @@
+from PyInstaller.utils.hooks import copy_metadata
+
 block_cipher = None
 
 a = Analysis(
@@ -16,7 +18,10 @@ a = Analysis(
         ("..\\pywebdriver\\static\\js\\*", "pywebdriver\\static\\js"),
         ("..\\pywebdriver\\translations\\*", "pywebdriver\\translations"),
         ("..\\pywebdriver\\translations\\fr", "pywebdriver\\translations\\fr"),
-    ],
+    ]
+    # so importlib.metadata.version("pywebdriver") works in the frozen exe
+    # (PyInstaller doesn't bundle .dist-info metadata by default)
+    + copy_metadata("pywebdriver"),
     hiddenimports=[
         "pywebdriver.plugins.cups_driver",
         "pywebdriver.plugins.display_driver",

@@ -7,8 +7,14 @@
 import gettext
 import logging.config
 import os
+import sys
 from configparser import ConfigParser
 from locale import getdefaultlocale
+
+if sys.version_info >= (3, 8):
+    from importlib import metadata as importlib_metadata
+else:  # Python < 3.8
+    import importlib_metadata
 
 # Librairies Imports
 from flask import Flask
@@ -50,6 +56,17 @@ cors = CORS(
     app, resources={r"/*": {"origins": cors_origins, "headers": ["Content-Type"]}}
 )
 
+try:
+    version = importlib_metadata.version("pywebdriver")
+except importlib_metadata.PackageNotFoundError:
+    version = "unknown"
+
+
+@app.context_processor
+def inject_pywebdriver_version():
+    return {"pywebdriver_version": version}
+
+
 from . import plugins  # noqa: E402
 from . import views  # noqa: E402
 
@@ -82,8 +99,6 @@ flask_args = dict(
 if config.has_option("flask", "sslcert"):
     sslcert = config.get("flask", "sslcert")
     if sslcert:
-        import sys
-
         if not config.has_option("flask", "sslkey"):
             print("If you want SSL, you must also provide the sslkey")
             sys.exit(-1)
