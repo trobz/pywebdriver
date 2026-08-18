@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pypostelium>=0.0.5",
+# ]
+# ///
+
 # Copyright (C) 2014-Today Akretion (http://www.akretion.com).
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl.html).
 """
