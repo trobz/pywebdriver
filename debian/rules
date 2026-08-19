@@ -9,8 +9,11 @@ SNAKE=/usr/bin/python3
 override_dh_virtualenv:
 	# the prebuilt pycups wheel needs AVX; force it to build from source so
 	# the packaged venv also works on weak/old CPUs (e.g. Celeron J4125)
-	dh_virtualenv --python=$(SNAKE) --builtin-venv --extra-pip-arg="--no-binary=pycups"
-
+	dh_virtualenv --python=/usr/bin/python3 --builtin-venv --extra-pip-arg="--no-binary=pycups" || { \
+		echo "===== PIP LOGS ====="; \
+		find /tmp -maxdepth 1 -type f -name 'tmp*' -exec sh -c 'echo "===== $$1 ====="; cat "$$1"' _ {} \; ; \
+		exit 1; \
+	}
 # https://dh-virtualenv.readthedocs.io/en/latest/howtos.html#handling-binary-wheels
 override_dh_strip:
 	dh_strip --exclude=/site-packages/
