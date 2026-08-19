@@ -51,6 +51,157 @@ jobs:
             pywebdriver_win64_installer.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build-bionic:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Ubuntu 18.04 package
+        run: |
+          docker run --rm -i \
+            --user root \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            ubuntu:18.04 \
+            bash -euxo pipefail -s <<'DOCKER_SCRIPT'
+
+              echo "========================================="
+              echo "Ubuntu version"
+              echo "========================================="
+
+              cat /etc/os-release
+
+              echo "========================================="
+              echo "Configure Bionic repositories"
+              echo "========================================="
+
+              cat > /etc/apt/sources.list <<'SOURCES_EOF'
+          deb http://archive.ubuntu.com/ubuntu bionic main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu bionic-security main restricted universe multiverse
+          SOURCES_EOF
+
+              echo "========================================="
+              echo "APT update"
+              echo "========================================="
+
+              apt-get update
+
+              echo "========================================="
+              echo "Install dependencies"
+              echo "========================================="
+
+              DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                ca-certificates \
+                libnss3-tools \
+                libcups2-dev \
+                cups \
+                devscripts \
+                debhelper \
+                dh-python \
+                dh-virtualenv \
+                python3-wheel \
+                python3-setuptools \
+                python3-venv \
+                libmtp-dev \
+                libffi-dev \
+                fakeroot \
+                python3-distutils \
+                python3-pip \
+                python3-simplejson \
+                python3-flask-babel \
+                python3-usb \
+                python3-serial \
+                python3-netifaces \
+                python3-cups \
+                python3-pillow \
+                dh-systemd \
+                perl
+
+              echo "========================================="
+              echo "Python"
+              echo "========================================="
+
+              python3 -m pip install \
+                --no-cache-dir \
+                "setuptools>45,<82"
+
+              python3 -m pip install flask-cors
+
+              echo "========================================="
+              echo "Build flags"
+              echo "========================================="
+
+              export DEB_CFLAGS_SET="-march=x86-64 -mtune=generic"
+              export DEB_CXXFLAGS_SET="-march=x86-64 -mtune=generic"
+              export CFLAGS="-march=x86-64 -mtune=generic"
+              export CXXFLAGS="-march=x86-64 -mtune=generic"
+
+              echo "DEB_CFLAGS_SET=$DEB_CFLAGS_SET"
+              echo "DEB_CXXFLAGS_SET=$DEB_CXXFLAGS_SET"
+              echo "CFLAGS=$CFLAGS"
+              echo "CXXFLAGS=$CXXFLAGS"
+
+              # 18.04 build uses Python 3.6, whose default text encoding in this environment is ASCII.
+              # In postelium package, there are some unicode characters in the description.
+              # Set LANG and LC_ALL to C.UTF-8 to avoid "UnicodeEncodeError: 'ascii' codec can't encode characters in position ... errors
+              export LANG=C.UTF-8
+              export LC_ALL=C.UTF-8
+
+              echo "========================================="
+              echo "Build package"
+              echo "========================================="
+
+              mkdir -p build
+
+              VERSION=$(date +%Y%m%d)
+              DEBIAN_FRONTEND=noninteractive apt-get install -y devscripts
+              /usr/bin/dch \
+                --package pywebdriver \
+                --newversion "$VERSION" \
+                --create \
+                -m "Created by CI"
+
+              debuild
+
+              echo "========================================="
+              echo "Build result"
+              echo "========================================="
+
+              ls -lah ../*.deb
+
+              # debuild/dpkg-buildpackage always drops the .deb one level
+              # above the source dir (i.e. outside /workspace, which is the
+              # only path bind-mounted back to the host). Copy it into the
+              # bind-mounted build/ dir so it survives past --rm.
+              cp ../*.deb build/
+              # build/ was created (mkdir -p above) and the .deb copied as
+              # root inside the container; open up permissions so the
+              # unprivileged host runner user can mv/read it afterward.
+              chmod -R a+rwX build
+          DOCKER_SCRIPT
+
+      - name: Rename package
+        run: |
+          mv build/pywebdriver_$(date +%Y%m%d)_amd64.deb \
+            ../pywebdriver_bionic.deb
+
+          ls -lah ../pywebdriver_bionic.deb
+
+      - name: Verify package
+        run: |
+          dpkg-deb --info ../pywebdriver_bionic.deb
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ../pywebdriver_bionic.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-jammy:
     runs-on: ubuntu-22.04
     steps:
