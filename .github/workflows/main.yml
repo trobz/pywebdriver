@@ -130,6 +130,8 @@ jobs:
 
               python3 -m pip install flask-cors
 
+              python3 -m pip install "python-barcode==0.14.0"
+
               echo "========================================="
               echo "Build flags"
               echo "========================================="
