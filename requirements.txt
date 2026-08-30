@@ -13,6 +13,8 @@ Pillow
 netifaces
 pycups
 pymtp
+python-barcode==0.14.0 ; python_version <= '3.6'
+python-barcode ; python_version > '3.6'
 git+https://github.com/akretion/py-xml-escpos.git@py3
 pypostelium
 pyposdisplay
