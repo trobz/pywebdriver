@@ -58,14 +58,14 @@ class CashlogyDriver(ThreadDriver):
         return self.status
 
     def _check_keep_alive(self):
-        # Disconnect if the POS has not polled status in KEEPALIVE_TIME_LIMIT seconds.
-        now = time.time()
-        if (
-            self.status.get("status") == "connected"
-            and (now - self._keepalive_tick) >= KEEPALIVE_TIME_LIMIT
-        ):
-            app.logger.debug("Cashlogy: disconnected because of inactivity")
-            self.disconnect()
+        if (time.time() - self._keepalive_tick) >= KEEPALIVE_INTERVAL:
+            self._keepalive_tick = time.time()
+            if (
+                self.status.get("status") == "connected"
+                and (time.time() - self._keepalive_tick) >= KEEPALIVE_TIME_LIMIT
+            ):
+                app.logger.debug("Disconnected because of timeout")
+                self.disconnect()
 
     def run(self):
         while True:
@@ -75,7 +75,9 @@ class CashlogyDriver(ThreadDriver):
                     timestamp, task, data = self.queue.get(timeout=KEEPALIVE_INTERVAL)
                 except Empty:
                     continue
-                self.process_task(task, timestamp, data)
+                # Process tasks
+                if task == "connect":
+                    self.connect(data)
             except Exception as e:
                 traceback.print_exc()
                 self.set_status("error", str(e))
@@ -89,6 +91,10 @@ class CashlogyDriver(ThreadDriver):
                     + "\n"
                 )
                 app.logger.error(errmsg)
+            except (KeyboardInterrupt, SystemExit):
+                # TODO: Not working as expected..
+                app.logger.debug("Shutdown signaled. Shutting down connection..")
+                self.disconnect()
 
     def connect(self, config):
         """Connect to CashlogyConnector and initialize the device.
@@ -105,15 +111,19 @@ class CashlogyDriver(ThreadDriver):
                 "Configuration error (host: {}, port: {})".format(host, port),
             )
             return False
+        # Connect and initialize
         try:
             self.set_status("connecting")
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.settimeout(SOCKET_TIMEOUT)
             self.socket.connect((host, port))
+            # Initialize Cashlogy
             self.set_status("connecting", "Initializing..")
             self.initialize()
             self.set_status("connected")
-            self._device_config = config
+            self.config = config
+            # Start thread
+            self.lockedstart()
             return True
         except Exception as e:
             self.set_status("error", repr(e))
@@ -148,6 +158,7 @@ class CashlogyDriver(ThreadDriver):
         if (device_config and status == "disconnected") or (
             force and status not in ["connected", "connecting"]
         ):
+            self.lockedstart()
             self.push_task("connect", device_config)
         return self.get_status()
 
