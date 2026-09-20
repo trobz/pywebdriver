@@ -91,7 +91,8 @@ def main():
         payment_mode,  # Using a card or a check
         telium.TERMINAL_NUMERIC_CURRENCY_EUR,
         telium.TERMINAL_REQUEST_ANSWER_WAIT_FOR_TRANSACTION,  # Wait for transaction to end
-        telium.TERMINAL_FORCE_AUTHORIZATION_DISABLE,  # Let device choose if authorization needed
+        telium.TERMINAL_FORCE_AUTHORIZATION_DISABLE,  # Let device choose
+        # if authorization needed
         AMOUNT,
     )
 
