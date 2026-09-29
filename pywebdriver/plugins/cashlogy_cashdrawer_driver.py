@@ -48,7 +48,7 @@ class CashlogyDriver(ThreadDriver):
         self.device_name = "Automatic Cashdrawer"
         self.socket = None
         self.status = {"status": "disconnected", "messages": ["Stand by.."]}
-        self._device_config = {}
+        self.config = {}
         self._keepalive_tick = time.time()
 
     def get_status(self, **kwargs):
