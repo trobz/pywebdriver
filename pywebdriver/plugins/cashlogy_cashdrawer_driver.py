@@ -113,19 +113,27 @@ class CashlogyDriver(ThreadDriver):
             return False
         # Connect and initialize
         try:
+            app.logger.debug("Cashlogy: connecting to %s:%s", host, port)
             self.set_status("connecting")
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.settimeout(SOCKET_TIMEOUT)
             self.socket.connect((host, port))
+            app.logger.debug(
+                "Cashlogy: socket connected to %s:%s, initializing..", host, port
+            )
             # Initialize Cashlogy
             self.set_status("connecting", "Initializing..")
-            self.initialize()
+            firmware_version = self.initialize()
+            app.logger.debug(
+                "Cashlogy: initialized, firmware version=%s", firmware_version
+            )
             self.set_status("connected")
             self.config = config
             # Start thread
             self.lockedstart()
             return True
         except Exception as e:
+            app.logger.debug("Cashlogy: connection to %s:%s failed: %r", host, port, e)
             self.set_status("error", repr(e))
             traceback.print_exc()
             return False
@@ -171,6 +179,7 @@ class CashlogyDriver(ThreadDriver):
                 self.socket.send(msg.encode() if isinstance(msg, str) else msg)
                 res = self.socket.recv(BUFFER_SIZE)
             except Exception as e:
+                app.logger.debug("Cashlogy: socket error while sending %r: %r", msg, e)
                 self.set_status("error", repr(e))
                 raise
             finally:
@@ -203,7 +212,9 @@ class CashlogyDriver(ThreadDriver):
                     app.logger.debug("Cashlogy: unrecognized param type: %s", v)
                     msg[i] = str(v)
             msg = "#%s#" % "#".join(msg)
+        app.logger.debug("Cashlogy: sending command %s", msg)
         res_raw = self._send(msg, blocking=blocking)
+        app.logger.debug("Cashlogy: command %s returned %s", msg, res_raw)
         res = res_raw.strip("#").split("#")
         if res and res[0].startswith("ER:"):
             raise Exception("Cashlogy error: {} (sent: {})".format(res_raw, msg))
@@ -349,7 +360,9 @@ def cashlogy_connect():
     json_data = request.json or {}
     params = json_data.get("params", {})
     device_config = params.get("config", {})
+    app.logger.debug("Cashlogy: HTTP call connect(%s)", device_config)
     result = cashlogy_cashdrawer_driver.keepalive(device_config, force=True)
+    app.logger.debug("Cashlogy: HTTP call connect returned %s", result)
     return jsonify(jsonrpc="2.0", result=result)
 
 
@@ -363,5 +376,7 @@ def cashlogy_command(cmd):
         )
     json_data = request.json or {}
     params = json_data.get("params", {})
+    app.logger.debug("Cashlogy: HTTP call %s(%s)", cmd, params)
     result = getattr(cashlogy_cashdrawer_driver, cmd)(**params)
+    app.logger.debug("Cashlogy: HTTP call %s returned %s", cmd, result)
     return jsonify(jsonrpc="2.0", result=result)
