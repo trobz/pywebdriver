@@ -1,4 +1,5 @@
 #jcconv
+setuptools>34,<82
 simplejson
 Flask<2.3
 Flask-Babel
@@ -9,7 +10,6 @@ pyserial
 Pillow
 netifaces
 pymtp
-setuptools>45
 pywin32
 windows-curses
 git+https://github.com/akretion/py-xml-escpos.git@py3
