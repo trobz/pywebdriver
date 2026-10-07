@@ -134,9 +134,9 @@ try:  # noqa C901
         }
     else:
         from escpos.printer import Usb as POSDriver
-except ImportError:
+except ImportError as e:
     installed = False
-    print("ESCPOS: xmlescpos python library not installed")
+    print(f"ESCPOS: xmlescpos python library not installed: {e}")
 else:
 
     class ESCPOSDriver(ThreadDriver, POSDriver):
