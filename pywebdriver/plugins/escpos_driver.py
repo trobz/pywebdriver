@@ -315,6 +315,8 @@ else:
 
     driver = ESCPOSDriver(app.config)
     drivers["escpos"] = driver
+    # for v18+
+    drivers["printer"] = driver
     installed = True
 
     @app.route("/hw_proxy/default_printer_action", methods=["POST", "GET", "PUT"])
