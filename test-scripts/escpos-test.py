@@ -212,12 +212,15 @@ def check_win32():
             return False
         printers_list = win32print.EnumPrinters(win32print.PRINTER_ENUM_NAME, None, 2)
         printers_dict = {item["pPrinterName"]: item for item in printers_list}
-        print("Printers found on this machine: %s" % (", ".join(printers_dict) or "(none)"))
+        print(
+            "Printers found on this machine: %s"
+            % (", ".join(printers_dict) or "(none)")
+        )
         for pattern in patterns:
             for name, printer in printers_dict.items():
                 if fnmatch.fnmatch(name, pattern):
                     title = status_titles.get(printer["Status"], "UNKNOWN")
-                    print("Pattern %r matched %r (status=%s)" % (pattern, name, title))
+                    print("Pattern {!r} matched {!r} (status={})".format(pattern, name, title))
                     if title not in unusable_titles:
                         printer_name = name
                         break
