@@ -314,7 +314,6 @@ else:
             self.receipt(msg)
 
     driver = ESCPOSDriver(app.config)
-    drivers["escpos"] = driver
     # for v18+
     drivers["printer"] = driver
     installed = True
