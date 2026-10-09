@@ -220,7 +220,11 @@ def check_win32():
             for name, printer in printers_dict.items():
                 if fnmatch.fnmatch(name, pattern):
                     title = status_titles.get(printer["Status"], "UNKNOWN")
-                    print("Pattern {!r} matched {!r} (status={})".format(pattern, name, title))
+                    print(
+                        "Pattern {!r} matched {!r} (status={})".format(
+                            pattern, name, title
+                        )
+                    )
                     if title not in unusable_titles:
                         printer_name = name
                         break
