@@ -37,6 +37,9 @@ elif (
 else:
     device_type = "usb"
 
+_logger = logging.getLogger(__name__)
+_logger.debug("ESCPOS: device_type = %s", device_type)
+
 SUPPORTED_DEVICES = [
     # Don't add 2 entries with the same vendor and product IDs
     # Epson TM-T70, TM-T70II and Epson TM-P20 have the same vendor/product IDs
@@ -46,8 +49,6 @@ SUPPORTED_DEVICES = [
     {"vendor": 0x04B8, "product": 0x0E28, "name": "Epson TM-T20III"},
     {"vendor": 0x0525, "product": 0xA700, "name": "Netchip POS Printer Aures ODP 333"},
 ]
-
-_logger = logging.getLogger(__name__)
 
 try:  # noqa C901
     if device_type == "serial":
@@ -156,13 +157,32 @@ else:
                     kwargs["in_ep"] = printer.get("in_ep", 0x82)
                     kwargs["out_ep"] = printer.get("out_ep", 0x01)
                     kwargs["timeout"] = 0
+                    _logger.debug(
+                        "ESCPOS: initializing USB printer %s (vendor=0x%04x "
+                        "product=0x%04x in_ep=0x%02x out_ep=0x%02x)",
+                        printer.get("name"),
+                        idVendor,
+                        idProduct,
+                        kwargs["in_ep"],
+                        kwargs["out_ep"],
+                    )
                     POSDriver.__init__(self, idVendor, idProduct, **kwargs)
                     self.open_args.append(usb_args)  # First open_arg is usb_args
+                else:
+                    _logger.debug("ESCPOS: no supported USB printer found")
             elif device_type == "serial":
                 kwargs["devfile"] = config.get("escpos_driver", "serial_device_name")
                 kwargs["baudrate"] = config.getint("escpos_driver", "serial_baudrate")
                 kwargs["bytesize"] = config.getint("escpos_driver", "serial_bytesize")
                 kwargs["timeout"] = config.getint("escpos_driver", "serial_timeout")
+                _logger.debug(
+                    "ESCPOS: initializing serial printer on %s "
+                    "(baudrate=%s bytesize=%s timeout=%s)",
+                    kwargs["devfile"],
+                    kwargs["baudrate"],
+                    kwargs["bytesize"],
+                    kwargs["timeout"],
+                )
                 POSDriver.__init__(self, **kwargs)
             elif device_type == "win32":
                 try:
@@ -195,6 +215,9 @@ else:
                 finally:
                     if "printer_name" not in kwargs:
                         kwargs["printer_name"] = "escpos"  # To avoid crashing
+                    _logger.debug(
+                        "ESCPOS: initializing win32 printer %r", kwargs["printer_name"]
+                    )
                     POSDriver.__init__(self, **kwargs)
             ThreadDriver.__init__(self, *args, **kwargs)
 
@@ -212,25 +235,34 @@ else:
                     is not None
                 ):
                     connected.append(device)
+            _logger.debug("ESCPOS: connected_usb_devices() -> %s", connected)
             return connected
 
         def open_printer(self):
             if self.device:
+                _logger.debug("ESCPOS: open_printer() - already open, skipping")
                 return
             try:
+                _logger.debug(
+                    "ESCPOS: open_printer() - opening with args %s", self.open_args
+                )
                 self.open(*self.open_args)
                 if device_type == "win32":
                     self.device = self.hPrinter
+                _logger.debug("ESCPOS: open_printer() - opened, device=%s", self.device)
             except Exception as e:
+                _logger.debug("ESCPOS: open_printer() - failed: %s", e)
                 self.set_status("error", e)
 
         def open_cashbox(self, printer):
+            _logger.debug("ESCPOS: open_cashbox()")
             self.open_printer()
             self.cashdraw(2)
             self.cashdraw(5)
             self.close()
 
         def get_status(self, **params):
+            _logger.debug("ESCPOS: get_status() called")
             messages = []
             self.open_printer()
             if not self.device:
@@ -267,22 +299,29 @@ else:
             else:
                 status = "disconnected"
             self.close()
+            _logger.debug(
+                "ESCPOS: get_status() -> status=%s messages=%s", status, messages
+            )
             return {
                 "status": status,
                 "messages": messages,
             }
 
         def receipt_jpeg(self, b64image):
+            _logger.debug("ESCPOS: receipt_jpeg() called")
             content = '<img src="data:image/png;base64, {}" />'.format(b64image)
             self.receipt(content)
 
         def receipt(self, content):
+            _logger.debug("ESCPOS: receipt() printing %d byte(s)", len(content))
             self.open_printer()
             Layout(content).format(self)
             self.cut()
             self.close()
+            _logger.debug("ESCPOS: receipt() done")
 
         def printstatus(self, eprint):
+            _logger.debug("ESCPOS: printstatus() called")
             addr_lines = []
             for ifaceName in interfaces():
                 addresses = [
