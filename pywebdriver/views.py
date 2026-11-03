@@ -48,6 +48,9 @@ def usb_devices():
     str_devices = subprocess.getoutput("lsusb").split("\n")
     devices = []
     for device in str_devices:
+        # skip lines that aren't devices (e.g. "lsusb: not found")
+        if ": ID " not in device:
+            continue
         devices.append(
             {
                 "bus": device.split(": ID ")[0].split(" ")[1],
