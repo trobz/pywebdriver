@@ -67,6 +67,7 @@ SUPPORTED_DEVICES = [
     {"vendor": 0x04B8, "product": 0x0202, "name": "Epson TM-T70"},
     {"vendor": 0x04B8, "product": 0x0E15, "name": "Epson TM-T20II"},
     {"vendor": 0x04B8, "product": 0x0E28, "name": "Epson TM-T20III"},
+    {"vendor": 0x04B8, "product": 0x0E39, "name": "Epson TM-T20IV"},
     {"vendor": 0x0525, "product": 0xA700, "name": "Netchip POS Printer Aures ODP 333"},
 ]
 
