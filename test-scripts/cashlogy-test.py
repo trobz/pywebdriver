@@ -196,7 +196,7 @@ def main():
             )
             sys.exit(2)
         result = getattr(client, COMMAND)()
-        print("%s result = %s" % (COMMAND, result))
+        print("{} result = {}".format(COMMAND, result))
     except Exception as e:
         print("Error: %s" % e)
         raise
