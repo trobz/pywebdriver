@@ -14,6 +14,31 @@ from pywebdriver import app, config, drivers
 from .base_driver import ThreadDriver
 
 
+def failure_answer(error_code, message, result_unknown=False, **extra):
+    """Answer of transaction_start_with_return() when there's no payment
+    result: transaction_result None tells the POS the payment didn't go
+    through, payment_terminal_return_message says why in English, and
+    error_code lets the POS show its own translated message. With result_unknown,
+    the terminal took the amount but its answer was lost, so the bank may
+    have approved the payment: a POS that knows the flag can ask the cashier
+    to check the terminal, others still show the message as a failure.
+    """
+    if result_unknown:
+        message = message.rstrip(". ") + (
+            ". The payment may have been approved: check the merchant receipt"
+            " on the terminal before retrying."
+        )
+    answer = {
+        "transaction_result": None,
+        "error_code": error_code,
+        "payment_terminal_return_message": message,
+        **extra,
+    }
+    if result_unknown:
+        answer["result_unknown"] = True
+    return answer
+
+
 class TeliumDriver(ThreadDriver, pypostelium.Driver):
     """Telium Driver class for pywebdriver"""
 
@@ -94,10 +119,19 @@ class TeliumDriver(ThreadDriver, pypostelium.Driver):
         FULLSIZED report, instead of pypostelium's defaults (instant
         answer, smallsized report) which are meant for the fire-and-forget
         transaction_start() flow.
+
+        When there's no payment result, returns a failure_answer() saying
+        why, flagged result_unknown once the terminal took the amount.
         """
         payment_info_dict = json.loads(payment_info)
         assert isinstance(payment_info_dict, dict), "payment_info_dict should be a dict"
         answer = {}
+        # Why there's no answer, for the cashier: (error_code, message).
+        failure = None
+        # Set once the terminal ACKs the amount: from then on, it can
+        # complete the payment with the bank even if we never get its answer
+        # (e.g. it comes after waiting_timeout, or can't be read).
+        amount_accepted = False
         try:
             app.logger.debug(
                 "Telium: opening serial port %s for payment terminal "
@@ -107,47 +141,98 @@ class TeliumDriver(ThreadDriver, pypostelium.Driver):
             )
             # IMPORTANT: don't modify timeout=3 seconds. The Telium spec
             # says we have to wait up to 3 seconds to get the LRC.
-            self.serial = Serial(self.device_name, self.device_rate, timeout=3)
-            if self.initialize_msg():
-                data = self.prepare_data_to_send(payment_info_dict)
-                if not data:
-                    return answer
-                data["answer_flag"] = "1"  # TERMINAL_ANSWER_SET_FULLSIZED
-                data["delay"] = "A010"  # TERMINAL_REQUEST_ANSWER_WAIT_FOR_TRANSACTION
-                self.send_message(data)
-                if self.get_one_byte_answer("ACK"):
-                    self.send_one_byte_signal("EOT")
-                    app.logger.info("Telium: now expecting answer from Terminal")
-                    # Raise the read timeout only for this wait: the
-                    # terminal can take much longer than 3s to actually
-                    # complete the transaction before it signals us.
-                    self.serial.timeout = self.waiting_timeout
-                    try:
-                        got_enq = self.get_one_byte_answer("ENQ")
-                    finally:
-                        self.serial.timeout = 3
-                    if got_enq:
-                        self.send_one_byte_signal("ACK")
-                        answer_data = self._get_fullsized_answer_from_terminal(data)
-                        self.send_one_byte_signal("ACK")
-                        if self.get_one_byte_answer("EOT"):
-                            app.logger.info("Telium: answer received from Terminal")
-                            answer = {
-                                "pos_number": answer_data["pos_number"],
-                                "transaction_result": int(
-                                    answer_data["transaction_result"]
-                                ),
-                                "amount_msg": float(answer_data["amount_msg"]),
-                                "payment_mode": answer_data["payment_mode"],
-                                "payment_terminal_return_message": answer_data,
-                            }
+            try:
+                self.serial = Serial(self.device_name, self.device_rate, timeout=3)
+            except Exception as e:
+                self.serial = False
+                failure = (
+                    "port_error",
+                    "Cannot open the payment terminal port %s: %s"
+                    % (self.device_name, e),
+                )
+                raise
+            if not self.initialize_msg():
+                return failure_answer(
+                    "no_answer",
+                    "The payment terminal on %s did not answer: check that it "
+                    "is switched on, connected and on its idle screen, then "
+                    "try again." % self.device_name,
+                )
+            data = self.prepare_data_to_send(payment_info_dict)
+            if not data:
+                return failure_answer(
+                    "unsupported",
+                    "The payment mode or currency is not supported by the "
+                    "payment terminal: %s %s"
+                    % (
+                        payment_info_dict.get("payment_mode"),
+                        payment_info_dict.get("currency_iso"),
+                    ),
+                )
+            data["answer_flag"] = "1"  # TERMINAL_ANSWER_SET_FULLSIZED
+            data["delay"] = "A010"  # TERMINAL_REQUEST_ANSWER_WAIT_FOR_TRANSACTION
+            self.send_message(data)
+            if not self.get_one_byte_answer("ACK"):
+                return failure_answer(
+                    "amount_refused",
+                    "The payment terminal did not accept the amount: it may "
+                    "be busy with a previous transaction. Press the red button "
+                    "on the terminal, then try again.",
+                )
+            amount_accepted = True
+            self.send_one_byte_signal("EOT")
+            app.logger.info("Telium: now expecting answer from Terminal")
+            # Raise the read timeout only for this wait: the
+            # terminal can take much longer than 3s to actually
+            # complete the transaction before it signals us.
+            self.serial.timeout = self.waiting_timeout
+            try:
+                got_enq = self.get_one_byte_answer("ENQ")
+            finally:
+                self.serial.timeout = 3
+            if not got_enq:
+                return failure_answer(
+                    "timeout",
+                    "No answer from the payment terminal within %d s after it "
+                    "took the amount." % self.waiting_timeout,
+                    result_unknown=True,
+                    waiting_timeout=self.waiting_timeout,
+                )
+            self.send_one_byte_signal("ACK")
+            answer_data = self._get_fullsized_answer_from_terminal(data)
+            # Keep the result as soon as it's read: a missing EOT
+            # after it doesn't change what the terminal reported.
+            answer = {
+                "pos_number": answer_data["pos_number"],
+                "transaction_result": int(answer_data["transaction_result"]),
+                "amount_msg": float(answer_data["amount_msg"]),
+                "payment_mode": answer_data["payment_mode"],
+                "payment_terminal_return_message": answer_data,
+            }
+            self.send_one_byte_signal("ACK")
+            if self.get_one_byte_answer("EOT"):
+                app.logger.info("Telium: answer received from Terminal")
+            else:
+                app.logger.warning(
+                    "Telium: no EOT after the answer from Terminal, "
+                    "using the answer anyway"
+                )
+            return answer
         except Exception as e:
             app.logger.error("Telium: exception in serial connection: %s", e)
+            if answer:
+                return answer
+            if not failure:
+                failure = (
+                    "error",
+                    "Error while talking to the payment terminal: %s"
+                    % (str(e) or type(e).__name__),
+                )
+            return failure_answer(*failure, result_unknown=amount_accepted)
         finally:
             if self.serial:
                 app.logger.debug("Telium: closing serial port for payment terminal")
                 self.serial.close()
-        return answer
 
 
 driver_config = {}

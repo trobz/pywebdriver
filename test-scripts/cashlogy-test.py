@@ -18,6 +18,7 @@ Usage:
 """
 import os
 import socket
+import sys
 
 BUFFER_SIZE = 1024
 SOCKET_TIMEOUT = 30
@@ -165,14 +166,37 @@ class CashlogyTestClient:
         }
         return {"recycler": recycler, "stacker": stacker, "total": totals}
 
+    def stop_acceptance(self):
+        """Stop an in-progress cash-acceptance operation (cancels a
+        start_acceptance/start_add_change left open by an old/stuck
+        transaction). Same as CashlogyDriver.stop_acceptance(): sends
+        protocol command 'J'.
+
+        Returns the total amount loaded (float, euros).
+        """
+        res = self.send(["J"])
+        return self.value_float(res[1])
+
+
+# Which command to run after connect+initialize. get_inventory and
+# stop_acceptance take no arguments, matching CashlogyDriver's own methods.
+COMMAND = os.environ.get("CASHLOGY_COMMAND", "get_inventory").strip()
+print("CASHLOGY_COMMAND = %s" % COMMAND)
+
 
 def main():
     client = CashlogyTestClient(HOST, PORT)
     try:
         client.connect()
         client.initialize()
-        inventory = client.get_inventory()
-        print("Inventory = %s" % inventory)
+        if not hasattr(client, COMMAND):
+            print(
+                "Unknown CASHLOGY_COMMAND %r. Available: get_inventory, "
+                "stop_acceptance" % COMMAND
+            )
+            sys.exit(2)
+        result = getattr(client, COMMAND)()
+        print("%s result = %s" % (COMMAND, result))
     except Exception as e:
         print("Error: %s" % e)
         raise
