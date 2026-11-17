@@ -180,9 +180,7 @@ else:
                         # leave self.device unset (Escpos.device defaults to
                         # None) so get_status()/open_printer() report/retry
                         # "disconnected" instead, same as a runtime failure.
-                        _logger.error(
-                            "ESCPOS: failed to initialize USB printer: %s", e
-                        )
+                        _logger.error("ESCPOS: failed to initialize USB printer: %s", e)
                 else:
                     _logger.debug("ESCPOS: no supported USB printer found")
             elif device_type == "serial":
@@ -201,9 +199,7 @@ else:
                 try:
                     POSDriver.__init__(self, **kwargs)
                 except Exception as e:
-                    _logger.error(
-                        "ESCPOS: failed to initialize serial printer: %s", e
-                    )
+                    _logger.error("ESCPOS: failed to initialize serial printer: %s", e)
             elif device_type == "win32":
                 try:
                     kwargs["printer_name"] = config.get("escpos_driver", "printer_name")
