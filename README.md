@@ -18,6 +18,7 @@ Windows distributions.
 - [Contributors](#contributors)
 - [Developers Section](#developers)
   - [Installation on Ubuntu](#install-ubuntu)
+  - [Upgrade on Ubuntu](#upgrade-ubuntu)
   - [Installation on Mac OS X](#install-osx)
   - [Installation on Windows 10](#install-windows)
   - [Compilation on Windows 11](#compile-windows)
@@ -113,6 +114,67 @@ reason to have it.
 If your Firefox has a master password, there will be an extra step. The terminal will
 ask _Enter Password or Pin for "NSS Certificate DB"_ and you have to write your Firefox
 master password.
+
+## <a name="upgrade-ubuntu"></a>Upgrade on Ubuntu
+
+To upgrade a computer where pywebdriver is already installed, use
+`upgrade_pywebdriver.sh` instead of running `install.sh` again. It keeps
+`/etc/pywebdriver/config.ini` as it is (port, host, drivers, SSL), and checks that the
+service answers afterwards.
+
+```
+wget https://raw.githubusercontent.com/trobz/pywebdriver/dev/debian/upgrade_pywebdriver.sh
+chmod +x upgrade_pywebdriver.sh
+./upgrade_pywebdriver.sh
+```
+
+Run it as the normal user, without `sudo`: it asks for the sudo password when it needs
+it.
+
+Options:
+
+- `--version vX.Y.Z`: install this release instead of the latest one. This is also how
+  to roll back, e.g. `./upgrade_pywebdriver.sh --version v3.0.49`.
+- `--no-ssl`: serve over plain HTTP. It comments out `sslcert` and `sslkey` in
+  `config.ini`, like answering "n" to the HTTPS question of `install.sh`. Without this
+  option, the SSL settings are kept as they are.
+
+What it does, in order:
+
+1. Checks that pywebdriver is installed (otherwise use `install.sh`), and reads the
+   Ubuntu codename (`bionic`, `jammy`, `noble`, `resolute`...).
+2. Downloads `pywebdriver_<codename>.deb` from the `trobz/pywebdriver` release: the
+   latest one, or the one given with `--version`. It stops there if the download fails,
+   without changing anything.
+3. Backs up `config.ini` to `config.ini.bak-<date>-<time>`, next to it.
+4. Installs the package with `apt-get install --reinstall` and dpkg's `--force-confold`
+   option, so the current `config.ini` is kept instead of the package's default one. It
+   doesn't run `apt update`: the package's dependencies are already installed, and
+   `apt update` can fail on old Ubuntu releases. If apt reports missing dependencies,
+   run `sudo apt update` and the script again.
+5. With `--no-ssl`, comments out `sslcert` and `sslkey`.
+6. Restarts the `pywebdriver` service and waits a few seconds.
+7. Prints a summary and checks the service:
+
+   ```
+     build:   20261109 -> 20261117
+     service: active
+     config:  unchanged
+     check:   http://127.0.0.1:8079/hw_proxy/hello -> ping
+   ```
+
+   The build is the package version, which is its build date. `config` shows the
+   differences with the backup, if any. The check calls `/hw_proxy/hello` on the host
+   and port from `config.ini`, over HTTPS if `sslcert` is set.
+
+The script exits with an error if the download or the installation fails, or if the
+service isn't active or doesn't answer `ping` after the restart. In that case, check
+`journalctl -feu pywebdriver`. To go back to the previous config:
+
+```
+sudo cp -a /etc/pywebdriver/config.ini.bak-<date>-<time> /etc/pywebdriver/config.ini
+sudo systemctl restart pywebdriver
+```
 
 ## <a name="install-osx"></a>Installation on Mac OS X
 
