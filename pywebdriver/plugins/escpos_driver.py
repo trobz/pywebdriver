@@ -48,6 +48,7 @@ SUPPORTED_DEVICES = [
     {"vendor": 0x04B8, "product": 0x0E15, "name": "Epson TM-T20II"},
     {"vendor": 0x04B8, "product": 0x0E28, "name": "Epson TM-T20III"},
     {"vendor": 0x04B8, "product": 0x0E39, "name": "Epson TM-T20IV"},
+    {"vendor": 0x04B8, "product": 0x0E32, "name": "Epson TM-m30III"},
     {"vendor": 0x0525, "product": 0xA700, "name": "Netchip POS Printer Aures ODP 333"},
 ]
 
@@ -158,6 +159,10 @@ else:
                     kwargs["in_ep"] = printer.get("in_ep", 0x82)
                     kwargs["out_ep"] = printer.get("out_ep", 0x01)
                     kwargs["timeout"] = 0
+                    # Populate open_args before attempting the open below, so
+                    # a later retry via open_printer() still has the args it
+                    # needs even if this first attempt fails.
+                    self.open_args.append(usb_args)  # First open_arg is usb_args
                     _logger.debug(
                         "ESCPOS: initializing USB printer %s (vendor=0x%04x "
                         "product=0x%04x in_ep=0x%02x out_ep=0x%02x)",
@@ -167,8 +172,17 @@ else:
                         kwargs["in_ep"],
                         kwargs["out_ep"],
                     )
-                    POSDriver.__init__(self, idVendor, idProduct, **kwargs)
-                    self.open_args.append(usb_args)  # First open_arg is usb_args
+                    try:
+                        POSDriver.__init__(self, idVendor, idProduct, **kwargs)
+                    except Exception as e:
+                        # Don't let a USB error (e.g. permission denied, cable
+                        # unplugged) take down the whole pywebdriver process:
+                        # leave self.device unset (Escpos.device defaults to
+                        # None) so get_status()/open_printer() report/retry
+                        # "disconnected" instead, same as a runtime failure.
+                        _logger.error(
+                            "ESCPOS: failed to initialize USB printer: %s", e
+                        )
                 else:
                     _logger.debug("ESCPOS: no supported USB printer found")
             elif device_type == "serial":
@@ -184,7 +198,12 @@ else:
                     kwargs["bytesize"],
                     kwargs["timeout"],
                 )
-                POSDriver.__init__(self, **kwargs)
+                try:
+                    POSDriver.__init__(self, **kwargs)
+                except Exception as e:
+                    _logger.error(
+                        "ESCPOS: failed to initialize serial printer: %s", e
+                    )
             elif device_type == "win32":
                 try:
                     kwargs["printer_name"] = config.get("escpos_driver", "printer_name")
@@ -219,7 +238,12 @@ else:
                     _logger.debug(
                         "ESCPOS: initializing win32 printer %r", kwargs["printer_name"]
                     )
-                    POSDriver.__init__(self, **kwargs)
+                    try:
+                        POSDriver.__init__(self, **kwargs)
+                    except Exception as e:
+                        _logger.error(
+                            "ESCPOS: failed to initialize win32 printer: %s", e
+                        )
             ThreadDriver.__init__(self, *args, **kwargs)
 
         def get_vendor_product(self):

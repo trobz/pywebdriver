@@ -68,6 +68,7 @@ SUPPORTED_DEVICES = [
     {"vendor": 0x04B8, "product": 0x0E15, "name": "Epson TM-T20II"},
     {"vendor": 0x04B8, "product": 0x0E28, "name": "Epson TM-T20III"},
     {"vendor": 0x04B8, "product": 0x0E39, "name": "Epson TM-T20IV"},
+    {"vendor": 0x04B8, "product": 0x0E32, "name": "Epson TM-m30III"},
     {"vendor": 0x0525, "product": 0xA700, "name": "Netchip POS Printer Aures ODP 333"},
 ]
 
@@ -76,25 +77,55 @@ def check_usb():
     import usb.core
     from escpos.printer import Usb
 
-    connected = []
-    for device in SUPPORTED_DEVICES:
-        found = usb.core.find(idVendor=device["vendor"], idProduct=device["product"])
-        if found is not None:
-            connected.append(device)
+    # Set these to test a printer that isn't in SUPPORTED_DEVICES yet
+    # (i.e. not in escpos_driver.py's allowlist either) -- bypasses the
+    # allowlist entirely so you can isolate "permissions/connectivity"
+    # from "not a recognized model". Values from `lsusb`, e.g.
+    # "Bus 001 Device 062: ID 04b8:0e32 ..." -> vendor=04b8 product=0e32.
+    override_vendor = os.environ.get("ESCPOS_USB_VENDOR")
+    override_product = os.environ.get("ESCPOS_USB_PRODUCT")
+    if override_vendor and override_product:
+        printer = {
+            "vendor": int(override_vendor, 16),
+            "product": int(override_product, 16),
+            "name": "ESCPOS_USB_VENDOR/ESCPOS_USB_PRODUCT override",
+        }
+        print(
+            "Using explicit override (bypassing SUPPORTED_DEVICES): "
+            "vendor=0x%04x product=0x%04x" % (printer["vendor"], printer["product"])
+        )
+        found = usb.core.find(idVendor=printer["vendor"], idProduct=printer["product"])
+        if found is None:
             print(
-                "Found supported USB printer: %s (vendor=0x%04x product=0x%04x)"
-                % (device["name"], device["vendor"], device["product"])
+                "No USB device found with vendor=0x%04x product=0x%04x "
+                "(check `lsusb`/cabling)" % (printer["vendor"], printer["product"])
             )
-    if not connected:
-        print("No supported USB printer found. Supported vendor/product IDs:")
+            return False
+    else:
+        connected = []
         for device in SUPPORTED_DEVICES:
-            print(
-                "  - %s (vendor=0x%04x product=0x%04x)"
-                % (device["name"], device["vendor"], device["product"])
+            found = usb.core.find(
+                idVendor=device["vendor"], idProduct=device["product"]
             )
-        return False
-
-    printer = connected[0]
+            if found is not None:
+                connected.append(device)
+                print(
+                    "Found supported USB printer: %s (vendor=0x%04x product=0x%04x)"
+                    % (device["name"], device["vendor"], device["product"])
+                )
+        if not connected:
+            print("No supported USB printer found. Supported vendor/product IDs:")
+            for device in SUPPORTED_DEVICES:
+                print(
+                    "  - %s (vendor=0x%04x product=0x%04x)"
+                    % (device["name"], device["vendor"], device["product"])
+                )
+            print(
+                "If your printer isn't listed above, set ESCPOS_USB_VENDOR/"
+                "ESCPOS_USB_PRODUCT (hex, from `lsusb`) to test it directly."
+            )
+            return False
+        printer = connected[0]
     print("Opening USB connection to %s ..." % printer["name"])
     # Usb.__init__() opens the device itself (calls self.open(usb_args)),
     # same as escpos_driver.py's POSDriver.__init__(idVendor, idProduct, **kwargs).

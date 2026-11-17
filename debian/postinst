@@ -7,11 +7,16 @@ if id -u $USERNAME &>/dev/null; then
     echo "$USERNAME already exists"
 else
     adduser --quiet --no-create-home --system $USERNAME --quiet
-    groupadd -f usbusers
-    adduser $USERNAME usbusers --quiet
-    adduser $USERNAME dialout --quiet
-    adduser $USERNAME ssl-cert --quiet
 fi
+
+# Always (re-)apply group membership, even on upgrade of an existing
+# install: adduser is idempotent, and this must not be gated behind "user
+# didn't exist yet" or an upgrade that adds a new required group (e.g.
+# usbusers) would never actually grant it to an already-existing user.
+groupadd -f usbusers
+adduser $USERNAME usbusers --quiet
+adduser $USERNAME dialout --quiet
+adduser $USERNAME ssl-cert --quiet
 
 echo "Restarting udev"
 if systemctl list-unit-files | grep -q '^systemd-udevd'; then
@@ -19,4 +24,9 @@ if systemctl list-unit-files | grep -q '^systemd-udevd'; then
 elif systemctl list-unit-files | grep -q '^udev'; then
     systemctl restart udev || true
 fi
+# Restarting the daemon alone does not re-apply rules to devices that are
+# already plugged in (e.g. the printer connected before this upgrade) --
+# re-trigger device events so the new/updated udev rule actually takes
+# effect without requiring a manual replug or reboot.
+udevadm trigger || true
 #DEBHELPER#
